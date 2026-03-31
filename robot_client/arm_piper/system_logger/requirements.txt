@@ -1,0 +1,2 @@
+# System Logger requirements
+# (minimal - no external dependencies beyond Python stdlib)

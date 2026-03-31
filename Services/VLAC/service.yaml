@@ -1,0 +1,15 @@
+name: vlac-critic-service
+version: 0.1.0
+description: VLAC pair-wise critic service for OpenClaw
+
+requires:
+  gpu: true
+  ram_gb: 16
+
+deploy:
+  image: abotclaw/vlac-critic-service:0.1.0
+  port: 8014
+  health: /health
+  ready_timeout: 240
+
+client: evo_vlac/examples/image_pair-wise_critic_example.py

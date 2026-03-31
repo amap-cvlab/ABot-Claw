@@ -1,0 +1,15 @@
+name: yolo-detection-service
+version: 0.1.0
+description: YOLOv5 HTTP detection service for OpenClaw remote inference
+
+requires:
+  gpu: true
+  ram_gb: 8
+
+deploy:
+  image: abotclaw/yolo-detection-service:0.1.0
+  port: 8013
+  health: /health
+  ready_timeout: 180
+
+client: test_api.py

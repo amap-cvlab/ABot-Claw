@@ -1,0 +1,14 @@
+# core (from pyproject.toml)
+ms-swift==3.3
+transformers>=4.51.0
+peft>=0.15.2
+opencv-python
+loguru
+timm
+flash-attn
+
+# api service
+fastapi
+uvicorn
+pydantic
+python-multipart

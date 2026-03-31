@@ -1,0 +1,111 @@
+"""GET /state, /health, /cameras endpoints for Piper robot."""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Response, Query
+from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+_no_cache_headers = {
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    "Pragma": "no-cache",
+}
+
+
+def create_router(state_agg, *args, **kwargs):
+    """Create state router.
+
+    Only state_agg and lease_mgr are used; extra positional/keyword args from
+    the old multi-backend signature are accepted and ignored for compatibility.
+    """
+    # Extract lease_mgr from positional args (3rd positional after state_agg)
+    # Old signature: create_router(state_agg, camera_backend, lease_mgr, ...)
+    lease_mgr = args[1] if len(args) > 1 else kwargs.get("lease_mgr")
+
+    @router.get("/state")
+    async def get_state():
+        """Get current robot state (arm joints, end-effector pose, gripper)."""
+        return state_agg.state
+
+    @router.get("/cameras")
+    async def list_cameras():
+        """List available cameras from ROS topics (configured in config.yaml)."""
+        try:
+            from robot_sdk.config import get_config
+            cfg = get_config()
+            cameras_cfg = cfg.get("cameras", {})
+            cameras = [
+                {"device_id": name, "name": name, "enabled": info.get("enabled", True)}
+                for name, info in cameras_cfg.items()
+                if info.get("enabled", True)
+            ]
+        except Exception as e:
+            logger.warning("Could not load camera config: %s", e)
+            cameras = []
+        return {"cameras": cameras}
+
+    @router.get("/cameras/{device_id}/frame")
+    async def get_device_frame(device_id: str):
+        """Get latest frame from a ROS camera topic as JPEG.
+
+        Args:
+            device_id: Camera name as defined in config.yaml (e.g. cam_high, cam_low)
+        """
+        try:
+            import rospy
+            from sensor_msgs.msg import Image as RosImage
+            from cv_bridge import CvBridge
+            import cv2
+
+            from robot_sdk.config import get_config
+            cfg = get_config()
+            cameras_cfg = cfg.get("cameras", {})
+
+            if device_id not in cameras_cfg:
+                return JSONResponse({"error": f"unknown camera: {device_id}"}, status_code=404)
+
+            topic = cameras_cfg[device_id].get("topic")
+            if not topic:
+                return JSONResponse({"error": f"no topic configured for camera: {device_id}"}, status_code=503)
+
+            msg = rospy.wait_for_message(topic, RosImage, timeout=2.0)
+            bridge = CvBridge()
+            try:
+                img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            except Exception:
+                img = bridge.imgmsg_to_cv2(msg)
+
+            ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if not ok:
+                return JSONResponse({"error": "failed to encode frame"}, status_code=500)
+
+            return Response(content=buf.tobytes(), media_type="image/jpeg", headers=_no_cache_headers)
+
+        except Exception as e:
+            logger.warning("Camera frame error (%s): %s", device_id, e)
+            return JSONResponse({"error": str(e)}, status_code=503)
+
+    @router.get("/health")
+    async def health():
+        """Server health and lease status."""
+        result: dict = {"status": "ok"}
+        if lease_mgr is not None:
+            result["lease"] = lease_mgr.status()
+        return result
+
+    @router.get("/logs", include_in_schema=False)
+    async def get_server_logs(limit: int = Query(default=100, ge=1, le=500)):
+        """Get recent server logs for dashboard display."""
+        from logging_config import get_log_buffer
+        buf = get_log_buffer()
+        if buf is None:
+            return {"logs": []}
+        return {"logs": buf.get_logs(limit)}
+
+    return router

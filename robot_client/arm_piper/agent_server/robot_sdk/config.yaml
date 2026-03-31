@@ -1,0 +1,118 @@
+# ----------------------------------------------------------
+# ROS 话题 & 坐标系
+# ----------------------------------------------------------
+ros:
+  # 彩色图像话题 (sensor_msgs/Image)
+  image_topic: "/wrist_camera/color/image_raw"
+
+  # 对齐到彩色的深度图话题 (sensor_msgs/Image)
+  depth_topic: "/wrist_camera/aligned_depth_to_color/image_raw"
+
+  # 相机内参话题 (sensor_msgs/CameraInfo)
+  camera_info_topic: "/wrist_camera/color/camera_info"
+
+  # 相机光学坐标系 frame_id
+  camera_frame_id: "wrist_camera_color_optical_frame"
+
+  # 机器人基座坐标系 frame_id
+  base_frame_id: "base_link"
+
+  # 关节状态话题 (sensor_msgs/JointState)
+  joint_state_topic: "/joint_states_single"
+
+  # 末端位姿话题 (geometry_msgs/PoseStamped)
+  end_pose_topic: "/end_pose"
+
+# ----------------------------------------------------------
+# 相机配置
+# ----------------------------------------------------------
+cameras:
+  # 每个相机的 name → ROS 话题映射
+  # name 用于 SDK 内部索引（cam_high / cam_low / cam_left_wrist / cam_right_wrist）
+  cam_high:
+    topic: "/left_camera/color/image_raw"
+    enabled: false
+
+  cam_low:
+    topic: "/wrist_camera/color/image_raw"
+    enabled: true
+
+  cam_left_wrist:
+    topic: "/cam_left_wrist"
+    enabled: false
+
+  cam_right_wrist:
+    topic: "/cam_right_wrist"
+    enabled: false
+
+# ----------------------------------------------------------
+# YOLO 目标检测服务
+# ----------------------------------------------------------
+yolo:
+  # 远程 YOLO HTTP 检测服务地址
+  url: "http://30.79.84.82:8017/detect"
+
+  # 置信度阈值
+  conf_thres: 0.5
+
+  # NMS IoU 阈值
+  iou_thres: 0.45
+
+  # HTTP 请求超时 (秒)
+  request_timeout: 10.0
+
+  # 等待首帧图像超时 (秒)
+  start_timeout: 30.0
+
+# ----------------------------------------------------------
+# AnyGrasp 抓取检测 (HTTP API 版)
+# ----------------------------------------------------------
+grasp:
+  # 远程 Grasp HTTP 服务地址
+  url: "http://30.79.84.82:8018/detect"
+
+  # 置信度阈值
+  conf_thres: 0.5
+
+  # NMS IoU 阈值
+  iou_thres: 0.45
+
+  # HTTP 请求超时 (秒)
+  request_timeout: 10.0
+
+  # 等待首帧图像超时 (秒)
+  start_timeout: 30.0
+
+# ----------------------------------------------------------
+# Piper 机械臂
+# ----------------------------------------------------------
+piper:
+  # ROS 环境 setup.bash 路径
+  setup_bash: "/path_to_robot_client/arm_piper/agent_server/robot_driver_ros/devel/setup.bash"
+
+  # MoveIt 默认速度 / 加速度比例 (0~1)
+  max_velocity: 0.5
+  max_acceleration: 0.5
+
+  # 复位关节角度 (弧度, 6 关节)
+  reset_joints: [0.0, 0.08, -0.32, -0.02, 1.06, -0.034]
+
+  # 复位夹爪开合度 (米)
+  reset_gripper: 0.059
+
+  # 关节数量
+  num_joints: 6
+
+  # 夹爪行程范围 (米)
+  gripper_min: 0.0
+  gripper_max: 0.06
+
+# ----------------------------------------------------------
+# Spatial Memory Hub (空间记忆服务)
+# ----------------------------------------------------------
+spatial_memory:
+  # 服务地址
+  url: "http://127.0.0.1:8022"
+
+  # HTTP 请求超时 (秒)
+  request_timeout: 10.0

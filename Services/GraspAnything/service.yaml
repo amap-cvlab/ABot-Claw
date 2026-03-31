@@ -1,0 +1,15 @@
+name: graspanything-service
+version: 0.1.0
+description: Grasp detection service (YOLO + AnyGrasp) for RGB-D input
+
+requires:
+  gpu: true
+  ram_gb: 12
+
+deploy:
+  image: abotclaw/graspanything-service:0.1.0
+  port: 8015
+  health: /health
+  ready_timeout: 240
+
+client: test_api.py
