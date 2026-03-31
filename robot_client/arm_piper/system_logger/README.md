@@ -1,6 +1,6 @@
 # System Logger
 
-Unified state recording and rewind orchestration for Tidybot.
+Unified state recording and rewind orchestration.
 
 ## Overview
 
@@ -51,7 +51,7 @@ system_logger/
 ## Installation
 
 ```bash
-cd ~/tidybot_uni/system_logger
+cd system_logger
 pip install -e .
 ```
 

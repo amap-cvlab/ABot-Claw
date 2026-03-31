@@ -5,8 +5,8 @@ from setuptools import setup, find_packages
 setup(
     name="system_logger",
     version="0.1.0",
-    description="Unified state recording and rewind orchestration for Tidybot",
-    author="Tidybot Team",
+    description="Unified state recording and rewind orchestration",
+    author="AbotClaw Team",
     packages=find_packages(),
     python_requires=">=3.8",
     install_requires=[],
