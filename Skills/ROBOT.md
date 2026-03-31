@@ -1,8 +1,8 @@
 ---
-summary: "AbotClaw robot fleet reference"
+
+## summary: "AbotClaw robot fleet reference"
 read_when:
   - Bootstrapping a workspace manually
----
 
 # ROBOT.md - About the Robot Fleet
 
@@ -12,11 +12,13 @@ This workspace is built for a **multi-robot fleet**, not a single embodiment.
 
 Fill only the **Base URL** column. The guide and SDK URLs are derived from it.
 
-| Robot | Base URL | Getting-started guide | SDK reference |
-|---|---|---|---|
-| Piper | `<PIPER_BASE_URL>` | `<PIPER_BASE_URL>/docs/guide/html` | `<PIPER_BASE_URL>/code/sdk/markdown` |
-| Unitree G1 | `<G1_BASE_URL>` | `<G1_BASE_URL>/docs/guide/html` | `<G1_BASE_URL>/code/sdk/markdown` |
-| Unitree Go2 | `<GO2_BASE_URL>` | `<GO2_BASE_URL>/docs/guide/html` | `<GO2_BASE_URL>/code/sdk/markdown` |
+
+| Robot       | Base URL           | Getting-started guide              | SDK reference                        |
+| ----------- | ------------------ | ---------------------------------- | ------------------------------------ |
+| Piper       | `<PIPER_BASE_URL>` | `<PIPER_BASE_URL>/docs/guide/html` | `<PIPER_BASE_URL>/code/sdk/markdown` |
+| Unitree G1  | `<G1_BASE_URL>`    | `<G1_BASE_URL>/docs/guide/html`    | `<G1_BASE_URL>/code/sdk/markdown`    |
+| Unitree Go2 | `<GO2_BASE_URL>`   | `<GO2_BASE_URL>/docs/guide/html`   | `<GO2_BASE_URL>/code/sdk/markdown`   |
+
 
 ### Recommended placeholders
 
@@ -92,3 +94,4 @@ Every robot-facing skill should state:
 2. What assumptions it makes about sensors and actuators
 3. What safety checks should happen before execution
 4. Whether it can run unattended or needs supervision
+

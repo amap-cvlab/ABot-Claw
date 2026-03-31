@@ -58,7 +58,62 @@ ABot-Claw employs a layered microservices architecture to ensure high cohesion a
 
 ### Server Side
 
-Pleace refer to the installation instructions in each service.
+Please refer to the installation instructions in each service.
+
+### OpenClaw Side
+
+1. Configure the OpenClaw workspace before running multi-robot tasks:
+
+```bash
+# Merge AbotClaw workspace files into an existing OpenClaw setup
+./setup.sh
+
+# Or rebuild the OpenClaw workspace, then apply AbotClaw files
+./setup.sh --fresh
+```
+
+2. Update robot fleet endpoints in `~/.openclaw/workspace/skills/ROBOT.md`:
+
+- `PIPER_BASE_URL=http://<PIPER_HOST>:<PIPER_PORT>`
+- `G1_BASE_URL=http://<G1_HOST>:<G1_PORT>`
+- `GO2_BASE_URL=http://<GO2_HOST>:<GO2_PORT>`
+
+Example:
+
+```text
+PIPER_BASE_URL=http://192.168.1.10:8880
+G1_BASE_URL=http://192.168.1.20:8880
+GO2_BASE_URL=http://192.168.1.30:8880
+```
+
+3. Update shared service host in `~/.openclaw/workspace/skills/SERVICE.md`:
+
+- `SERVICE_HOST=<SERVICE_HOST>`
+
+Example:
+
+```text
+SERVICE_HOST=192.168.1.100
+```
+
+Service URLs are derived as:
+
+- `http://<SERVICE_HOST>:8012` (SpatialMemory)
+- `http://<SERVICE_HOST>:8013` (YOLO)
+- `http://<SERVICE_HOST>:8014` (VLAC)
+- `http://<SERVICE_HOST>:8015` (GraspAnything)
+
+4. Verify robot-type routing rules in `~/.openclaw/workspace/skills/MISSION.md`:
+
+- Piper: fixed-base manipulation tasks
+- Unitree G1: humanoid interaction / whole-body tasks
+- Unitree Go2: mobility, scouting, and inspection tasks
+
+5. Restart the OpenClaw gateway:
+
+```bash
+openclaw gateway restart
+```
 
 ### Robot Side
 
@@ -69,13 +124,13 @@ cd robot_client/arm_piper/agent_server
 pip3 install -r requirements.txt
 ```
 
-2. Build ROS driver in `robot_driver_ros`: (Download the corresponding ROS driver for your robot.)
+2. Build ROS driver in `robot_driver_ros` (download the corresponding ROS driver for your robot):
 
 ```bash
 cd robot_driver_ros/src
 git clone https://github.com/agilexrobotics/piper_ros.git
 git clone https://github.com/realsenseai/realsense-ros.git -b ros1-legacy
-# Install the dependencies required for the corresponding driver.
+# Install dependencies required by the corresponding driver.
 
 cd ../..
 catkin_make
