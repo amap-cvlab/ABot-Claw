@@ -3,6 +3,10 @@
 ## 1. 服务作用与能力边界
 GraspAnything 服务用于在 **单帧 RGB-D** 图像上执行抓取位姿检测。
 
+运行形态：
+- 纯 HTTP 服务，不依赖 ROS 运行环境
+- 通过 JSON 请求直接接收 RGB/Depth（推荐 raw base64）
+
 可实现能力：
 - YOLO 检测指定目标物体（如 `cup`、`bottle`）
 - 在目标区域点云上运行 AnyGrasp
@@ -107,6 +111,10 @@ PORT=8015 GRASP_CHECKPOINT_PATH=/abs/path/to/checkpoint_detection.tar DEVICE=aut
 
 ## 6. 常见错误与处理
 - `400 Invalid input payload`：图像或内参格式错误
+- `400 Invalid input payload`（常见细分）：
+  - `camera_intrinsics` 不是 3x3
+  - `color_image` 与 `depth_image` 分辨率不一致
+  - 深度图不是单通道有效格式（推荐 `uint16 PNG` 毫米）
 - `400 object_name cannot be empty`
 - `503 Grasp model not initialized`
 - `500 Grasp inference failed`：模型推理异常（可重试）

@@ -69,6 +69,8 @@ class GraspResponse(BaseModel):
 
 def _load_image_bytes(image_input: str) -> bytes:
     payload = image_input.strip()
+    if not payload:
+        raise ValueError("Empty image payload")
     if payload.startswith(("http://", "https://")):
         response = requests.get(payload, timeout=20)
         response.raise_for_status()
@@ -98,16 +100,49 @@ def _decode_depth(image_input: str) -> np.ndarray:
     depth = cv2.imdecode(arr, cv2.IMREAD_UNCHANGED)
     if depth is None:
         raise ValueError("Failed to decode depth image")
-    if depth.ndim == 3:
-        depth = cv2.cvtColor(depth, cv2.COLOR_BGR2GRAY)
-    return depth.astype(np.float32)
+    if depth.ndim != 2:
+        raise ValueError(
+            f"Depth image must be single-channel, got shape {depth.shape}. "
+            "Use uint16 PNG depth in millimeters."
+        )
+
+    if depth.dtype == np.uint16:
+        return depth.astype(np.float32, copy=False)
+
+    if np.issubdtype(depth.dtype, np.floating):
+        depth_f = depth.astype(np.float32, copy=False)
+        depth_f = np.where(np.isfinite(depth_f), depth_f, 0.0)
+        max_depth = float(np.max(depth_f)) if depth_f.size else 0.0
+        # Float depth <= 10 is typically meters; convert to millimeters.
+        if max_depth <= 10.0:
+            depth_f = depth_f * 1000.0
+        return np.clip(depth_f, 0.0, 65535.0).astype(np.float32)
+
+    if np.issubdtype(depth.dtype, np.integer):
+        if depth.dtype == np.uint8:
+            raise ValueError("Depth image uint8 is not supported; expected uint16 PNG depth")
+        return np.clip(depth.astype(np.float32), 0.0, 65535.0)
+
+    raise ValueError(f"Unsupported depth image dtype: {depth.dtype}")
 
 
 def _parse_intrinsics(k: List[List[float]]) -> np.ndarray:
     matrix = np.array(k, dtype=np.float64)
     if matrix.shape != (3, 3):
         raise ValueError(f"camera_intrinsics must be 3x3, got {matrix.shape}")
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError("camera_intrinsics contains non-finite values")
+    if matrix[0, 0] <= 0 or matrix[1, 1] <= 0:
+        raise ValueError("camera_intrinsics fx/fy must be positive")
     return matrix
+
+
+def _validate_rgb_depth_shapes(color_bgr: np.ndarray, depth_map: np.ndarray) -> None:
+    if color_bgr.shape[:2] != depth_map.shape[:2]:
+        raise ValueError(
+            "color_image and depth_image resolution mismatch: "
+            f"color={color_bgr.shape[:2]}, depth={depth_map.shape[:2]}"
+        )
 
 
 @asynccontextmanager
@@ -127,7 +162,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="AbotClaw GraspAnything Service",
+    title="TidyBot GraspAnything Service",
     version=SERVICE_VERSION,
     description="Run grasp detection (YOLO + AnyGrasp) on RGB-D inputs.",
     lifespan=lifespan,
@@ -158,6 +193,7 @@ def grasp_detect(req: GraspRequest) -> GraspResponse:
         color_bgr = _decode_color_bgr(req.color_image)
         depth_map = _decode_depth(req.depth_image)
         camera_k = _parse_intrinsics(req.camera_intrinsics)
+        _validate_rgb_depth_shapes(color_bgr, depth_map)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Invalid input payload: {exc}")
 

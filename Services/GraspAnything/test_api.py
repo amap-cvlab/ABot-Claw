@@ -1,93 +1,63 @@
 import argparse
 import base64
 import json
-import sys
+from pathlib import Path
 
-import cv2
-import numpy as np
 import requests
-import rospy
-from cv_bridge import CvBridge
-from sensor_msgs.msg import Image as RosImage
 
-DEFAULT_URL = "http://30.79.84.82:8017/detect"
-DEFAULT_IMAGE_TOPIC = "/wrist_camera/color/image_raw"
+DEFAULT_URL = "http://127.0.0.1:8015/grasp/detect"
+DEFAULT_K = "[[600.0,0.0,320.0],[0.0,600.0,240.0],[0.0,0.0,1.0]]"
 
 
-def ros_image_to_bgr(msg: RosImage) -> np.ndarray:
-    bridge = CvBridge()
-    try:
-        return bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-    except Exception:
-        return bridge.imgmsg_to_cv2(msg)
+def _encode_file_as_base64(file_path: str) -> str:
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {path}")
+    return base64.b64encode(path.read_bytes()).decode("utf-8")
 
 
-def run_detect(url: str, img_b64: str, conf_thres: float, iou_thres: float) -> None:
-    payload = {
-        "image": img_b64,
-        "conf_thres": conf_thres,
-        "iou_thres": iou_thres,
-    }
-    response = requests.post(url, json=payload)
-    response.raise_for_status()
-    res_json = response.json()
-    print(f"Detected {res_json['count']} objects:")
-    print(json.dumps(res_json, indent=2))
-
-
-def test_detect_from_ros(
+def run_detect(
     url: str,
-    image_topic: str,
+    color_path: str,
+    depth_path: str,
+    camera_k_json: str,
+    object_name: str,
+    top_k: int,
     timeout: float,
-    conf_thres: float,
-    iou_thres: float,
 ) -> None:
-    rospy.init_node("yolo_detect_api_test", anonymous=True)
-    try:
-        msg = rospy.wait_for_message(image_topic, RosImage, timeout=timeout)
-    except rospy.ROSException as e:
-        print(f"未在 {timeout}s 内从话题收到图像: {image_topic}", file=sys.stderr)
-        print(e, file=sys.stderr)
-        sys.exit(1)
-
-    img = ros_image_to_bgr(msg)
-    ok, buffer = cv2.imencode(".png", img)
-    if not ok:
-        print("cv2.imencode 失败", file=sys.stderr)
-        sys.exit(1)
-    img_b64 = base64.b64encode(buffer).decode("utf-8")
-
-    try:
-        run_detect(url, img_b64, conf_thres, iou_thres)
-    except Exception as e:
-        print("API request failed:", e)
-        sys.exit(1)
+    payload = {
+        "color_image": _encode_file_as_base64(color_path),
+        "depth_image": _encode_file_as_base64(depth_path),
+        "camera_intrinsics": json.loads(camera_k_json),
+        "object_name": object_name,
+        "top_k": top_k,
+    }
+    response = requests.post(url, json=payload, timeout=timeout)
+    response.raise_for_status()
+    print(json.dumps(response.json(), ensure_ascii=False, indent=2))
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(description="从 ROS 图像话题取一帧并调用 YOLO 检测 HTTP API")
-    p.add_argument("--url", default=DEFAULT_URL, help="检测服务地址")
-    p.add_argument(
-        "--image-topic",
-        default=DEFAULT_IMAGE_TOPIC,
-        help="sensor_msgs/Image 彩色图话题",
+    parser = argparse.ArgumentParser(
+        description="Call GraspAnything /grasp/detect with base64 RGB and depth images"
     )
-    p.add_argument(
-        "--timeout",
-        type=float,
-        default=10.0,
-        help="等待首帧图像的超时（秒）",
-    )
-    p.add_argument("--conf-thres", type=float, default=0.25)
-    p.add_argument("--iou-thres", type=float, default=0.45)
-    args = p.parse_args()
+    parser.add_argument("--url", default=DEFAULT_URL, help="Grasp service endpoint URL")
+    parser.add_argument("--color", required=True, help="Path to color image (png/jpg)")
+    parser.add_argument("--depth", required=True, help="Path to depth image (uint16 png recommended)")
+    parser.add_argument("--camera-k", default=DEFAULT_K, help="3x3 camera intrinsics JSON string")
+    parser.add_argument("--object-name", default="cup", help="Target object class name")
+    parser.add_argument("--top-k", type=int, default=5, help="Max grasp candidates")
+    parser.add_argument("--timeout", type=float, default=120.0, help="HTTP timeout in seconds")
+    args = parser.parse_args()
 
-    test_detect_from_ros(
+    run_detect(
         url=args.url,
-        image_topic=args.image_topic,
+        color_path=args.color,
+        depth_path=args.depth,
+        camera_k_json=args.camera_k,
+        object_name=args.object_name,
+        top_k=args.top_k,
         timeout=args.timeout,
-        conf_thres=args.conf_thres,
-        iou_thres=args.iou_thres,
     )
 
 

@@ -13,17 +13,20 @@ from __future__ import annotations
 
 import sys
 import os
+import logging
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import rospy
 
 from yolo_service import YoloDetector
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "grasp_detection"))
 from gsnet import AnyGrasp
+
+
+logger = logging.getLogger(__name__)
 
 
 def _rot_to_quat(R: np.ndarray) -> Tuple[float, float, float, float]:
@@ -123,7 +126,7 @@ class GraspDetectorNoFilter:
         )
         self._anygrasp = AnyGrasp(cfg)
         self._anygrasp.load_net()
-        rospy.loginfo("AnyGrasp 模型加载完成: %s", checkpoint_path)
+        logger.info("AnyGrasp model loaded: %s", checkpoint_path)
 
     @property
     def yolo(self) -> YoloDetector:
@@ -218,8 +221,7 @@ class GraspDetectorNoFilter:
         输入单帧 RGB-D 与目标类别，输出相机坐标系抓取位姿。
         这是无 service 的直接调用接口。
         """
-        det_results = self._yolo._model(color_bgr)
-        df = det_results.pandas().xyxy[0]
+        df = self._yolo.infer_dataframe(color_bgr)
         if df is None or len(df) == 0:
             return []
         df = df[df["name"] == object_name]
@@ -231,7 +233,7 @@ class GraspDetectorNoFilter:
             xyxy = (int(row.xmin), int(row.ymin), int(row.xmax), int(row.ymax))
             points, colors = self._build_object_pointcloud(color_bgr, depth_map, K, xyxy)
             if len(points) < 50:
-                rospy.logwarn("'%s' 点云过稀 (%d 点)，跳过", object_name, len(points))
+                logger.warning("Sparse point cloud for '%s' (%d points), skipped", object_name, len(points))
                 continue
 
             p_min, p_max = points.min(axis=0), points.max(axis=0)
@@ -247,7 +249,7 @@ class GraspDetectorNoFilter:
                     apply_object_mask=True, dense_grasp=False, collision_detection=True,
                 )
             except Exception as e:
-                rospy.logwarn("AnyGrasp 检测失败: %s", e)
+                logger.warning("AnyGrasp inference failed: %s", e)
                 continue
 
             if len(gg) == 0:
@@ -304,42 +306,17 @@ class GraspDetectorNoFilter:
           List[GraspResult]，每个检测到的物体实例一个，
           内含最多 top_k 个 camera 下的 6DoF 位姿。
         """
-        if not self._yolo._started:
-            self.start()
-
-        with self._yolo._lock:
-            color_bgr = None if self._yolo._last_color_bgr is None else self._yolo._last_color_bgr.copy()
-            depth_map = None if self._yolo._last_depth is None else self._yolo._last_depth.copy()
-            K = None if self._yolo._camera_K is None else self._yolo._camera_K.copy()
-
-        if color_bgr is None:
-            raise RuntimeError(f"尚未收到彩色图像: {self._yolo._image_topic}")
-        if depth_map is None:
-            raise RuntimeError(f"尚未收到深度图: {self._yolo._depth_topic}")
-        if K is None:
-            raise RuntimeError(f"尚未收到相机内参: {self._yolo._camera_info_topic}")
-        return self.get_grasp_pose_from_frame(color_bgr, depth_map, K, object_name, top_k)
+        raise RuntimeError(
+            "get_grasp_pose() without frame input was removed with ROS support. "
+            "Use get_grasp_pose_from_frame(color_bgr, depth_map, K, object_name, top_k)."
+        )
 
 
 # ======================================================================
 # 快速测试
 # ======================================================================
 if __name__ == "__main__":
-    import json
-    import argparse
-
-    parser = argparse.ArgumentParser(description="AnyGrasp 抓取位姿检测 (无约束, 相机坐标系输出)")
-    parser.add_argument("--checkpoint_path", required=True)
-    parser.add_argument("--target", default="orange")
-    parser.add_argument("--top_k", type=int, default=5)
-    args = parser.parse_args()
-
-    grasp = GraspDetectorNoFilter(
-        checkpoint_path=args.checkpoint_path,
-        model_name="yolov5l6",
-        conf=0.5,
+    print(
+        "This module is used by FastAPI service. "
+        "Call GraspDetectorNoFilter.get_grasp_pose_from_frame(...) from main.py."
     )
-
-    with grasp:
-        results = grasp.get_grasp_pose(args.target, top_k=args.top_k)
-        print(json.dumps(grasp._as_dict(results, args.target, args.top_k), ensure_ascii=False, indent=2))
