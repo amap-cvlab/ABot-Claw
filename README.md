@@ -1,8 +1,27 @@
-# 🦞 ABot-Claw
 
-**AMAP CV Lab**
 
-**ABot-Claw** is a next-generation embodied AI framework built on OpenClaw that unifies VLN, VLA, and WAM models through the **VLAC (Vision-Language-Action-Critic)** loop, enabling real-time task monitoring and self-adaptation. By sharing a **multimodal memory**—centered on vision, semantics, and geometry—across devices and leveraging centralized control, it breaks down the silos of single-task robots, delivering a robust, collaborative, and elastically scalable **multi-agent system**.
+<div align="center">
+
+<h1>🦞 ABot-Claw: A Foundation for Persistent, Cooperative, and Self-Evolving Robotic Agents</h1>
+
+
+<p align="center">
+  <b>AMAP CV Lab</b>
+</p>
+
+
+<p align="center">
+  <a href="https://github.com/amap-cvlab/ABot-Claw"><img src="https://img.shields.io/static/v1?label=Paper&message=Technical_Report&color=red&logo=arxiv"></a>
+  <a href="https://github.com/amap-cvlab/ABot-Claw"><img src="https://img.shields.io/badge/Project-Website-blue"></a>
+    <a href="https://huggingface.co/acvlab"><img src="https://img.shields.io/static/v1?label=%F0%9F%A4%97%20Model&message=HuggingFace&color=orange"></a>
+</p>
+
+</div>
+
+
+
+
+> **ABot-Claw** is a next-generation embodied AI framework built on OpenClaw that unifies VLN, VLA, and WAM models through the **VLAC (Vision-Language-Action-Critic)** loop, enabling real-time task monitoring and self-adaptation. By sharing a **multimodal memory**—centered on vision, semantics, and geometry—across devices and leveraging centralized control, it breaks down the silos of single-task robots, delivering a robust, collaborative, and elastically scalable **multi-agent system**.
 
 ---
 
