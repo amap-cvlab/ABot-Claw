@@ -209,5 +209,7 @@ This project builds upon the following open-source projects. We thank these team
 
 - [Tidybot-Universe](https://github.com/TidyBot-Services/Tidybot-Universe.git)
 
+We also gratefully acknowledge Deepblue College for their support in the humanoid robot deployment, providing access to the Unitree G1-Romp Edu robot and the LinkerBot-O6 hand system.
+
 ---
 
