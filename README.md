@@ -139,7 +139,7 @@ openclaw gateway restart
 1. Install Python dependencies:
 
 ```bash
-cd robot_client/arm_piper/agent_server
+cd robot_layer/arm_piper/agent_server
 pip3 install -r requirements.txt
 ```
 
@@ -155,7 +155,7 @@ cd ../..
 catkin_make
 ```
 
-3. Update robot topics and source path in `robot_client/arm_piper/agent_server/robot_sdk/config.yaml`:
+3. Update robot topics and source path in `robot_layer/arm_piper/agent_server/robot_sdk/config.yaml`:
 
 ```yaml
 ros:
@@ -166,7 +166,7 @@ ros:
   end_pose_topic: "/your_end_pose_topic"
 
 piper:
-  setup_bash: "/absolute_path_to/robot_client/arm_piper/agent_server/robot_driver_ros/devel/setup.bash"
+  setup_bash: "/absolute_path_to/robot_layer/arm_piper/agent_server/robot_driver_ros/devel/setup.bash"
 ```
 
 > Please modify the ROS topics according to your robot setup, and make sure `setup_bash` points to your local `devel/setup.bash`.
@@ -174,7 +174,7 @@ piper:
 4. Launch components in order:
   - Arm driver
     ```bash
-    cd robot_client/arm_piper/agent_server/robot_driver_ros/src/piper_ros
+    cd robot_layer/arm_piper/agent_server/robot_driver_ros/src/piper_ros
     ./can_activate.sh
 
     cd ../..
@@ -184,20 +184,20 @@ piper:
     ```
   - Camera driver
     ```bash
-    cd robot_client/arm_piper/agent_server/robot_driver_ros
+    cd robot_layer/arm_piper/agent_server/robot_driver_ros
     source devel/setup.bash
     roslaunch realsense2_camera rs_rgbd.launch
     ```
   - Arm MoveIt
     ```bash
-    cd robot_client/arm_piper/agent_server/robot_driver_ros
+    cd robot_layer/arm_piper/agent_server/robot_driver_ros
     source devel/setup.bash
     roslaunch piper_with_gripper_moveit demo.launch use_rviz:=false
     ```
 5. After all three components are running, start the robot agent server:
 
 ```bash
-cd robot_client/arm_piper/agent_server
+cd robot_layer/arm_piper/agent_server
 python3 server.py --port 8888
 ```
 
