@@ -128,8 +128,10 @@ class StateAggregator:
         except Exception as e:
             logger.debug("get_robot_state failed: %s", e)
 
-        joint_positions = list(robot_state.get("joint_positions", []))
-        joint_velocities = list(robot_state.get("joint_velocities", []))
+        _jp = robot_state.get("joint_positions")
+        joint_positions = _jp.tolist() if hasattr(_jp, "tolist") else list(_jp or [])
+        _jv = robot_state.get("joint_velocities")
+        joint_velocities = _jv.tolist() if hasattr(_jv, "tolist") else list(_jv or [])
         gripper_position = float(
             (robot_state.get("gripper_position") or [0.0])[0]
             if robot_state.get("gripper_position") is not None
@@ -143,11 +145,14 @@ class StateAggregator:
         except Exception as e:
             logger.debug("get_robot_end_pose failed: %s", e)
 
-        # 相机可用性（只检查帧是否为 None，不解码）
         cameras: dict[str, bool] = {}
         try:
+            import numpy as np
             images, _ = await loop.run_in_executor(None, self._env.read_cameras)
-            cameras = {name: img is not None for name, img in images.items()}
+            cameras = {
+                name: img is not None and np.any(img)
+                for name, img in images.items()
+            }
         except Exception as e:
             logger.debug("read_cameras failed: %s", e)
 

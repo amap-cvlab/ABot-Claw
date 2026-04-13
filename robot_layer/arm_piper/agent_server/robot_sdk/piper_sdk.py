@@ -122,9 +122,16 @@ class PiperRobotEnv:
 
         self._latest_camera_frames = {}
         self._camera_lock = threading.Lock()
+
+        cameras_cfg = cfg.get("cameras", {})
+        self._cam_alias = {
+            name: info.get("alias", name)
+            for name, info in cameras_cfg.items()
+        }
         self._camera_meta = [
-            {"device_id": "left_camera_0_left", "name": "left_camera_0_left"},
-            {"device_id": "wrist_camera_0_left", "name": "wrist_camera_0_left"},
+            {"device_id": self._cam_alias[name], "name": self._cam_alias[name]}
+            for name, info in cameras_cfg.items()
+            if info.get("enabled", False)
         ]
 
         self._init_robot_interface()
@@ -277,10 +284,9 @@ class PiperRobotEnv:
     def _get_images(self):
         images_raw = self.image_recorder.get_images()
         image_dict = {}
-        if "cam_high" in images_raw and images_raw["cam_high"] is not None:
-            image_dict["left_camera_0_left"] = images_raw["cam_high"]
-        if "cam_low" in images_raw and images_raw["cam_low"] is not None:
-            image_dict["wrist_camera_0_left"] = images_raw["cam_low"]
+        for cfg_name, alias in self._cam_alias.items():
+            if cfg_name in images_raw and images_raw[cfg_name] is not None:
+                image_dict[alias] = images_raw[cfg_name]
         return image_dict
 
     # ================================================================== #

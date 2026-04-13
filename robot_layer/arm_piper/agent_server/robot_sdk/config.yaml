@@ -29,12 +29,15 @@ ros:
 cameras:
   # 每个相机的 name → ROS 话题映射
   # name 用于 SDK 内部索引（cam_high / cam_low / cam_left_wrist / cam_right_wrist）
+  # alias 用于 HTTP API 返回的设备名；未指定时默认与 name 相同
   cam_high:
     topic: "/left_camera/color/image_raw"
+    alias: "left_camera_0_left"
     enabled: false
 
   cam_low:
     topic: "/wrist_camera/color/image_raw"
+    alias: "wrist_camera_0_left"
     enabled: true
 
   cam_left_wrist:

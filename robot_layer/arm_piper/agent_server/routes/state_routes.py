@@ -19,6 +19,25 @@ _no_cache_headers = {
 }
 
 
+def _build_camera_maps(cameras_cfg: dict) -> tuple[dict, dict]:
+    """Build bidirectional alias <-> config-name maps from cameras config."""
+    alias_to_cfg = {}
+    cfg_to_alias = {}
+    for name, info in cameras_cfg.items():
+        alias = info.get("alias", name)
+        alias_to_cfg[alias] = name
+        cfg_to_alias[name] = alias
+    return alias_to_cfg, cfg_to_alias
+
+
+def _resolve_device_id(device_id: str, cameras_cfg: dict) -> str | None:
+    """Accept either config name (cam_low) or alias (wrist_camera_0_left)."""
+    if device_id in cameras_cfg:
+        return device_id
+    alias_to_cfg, _ = _build_camera_maps(cameras_cfg)
+    return alias_to_cfg.get(device_id)
+
+
 def create_router(state_agg, *args, **kwargs):
     """Create state router.
 
@@ -41,21 +60,25 @@ def create_router(state_agg, *args, **kwargs):
             from robot_sdk.config import get_config
             cfg = get_config()
             cameras_cfg = cfg.get("cameras", {})
+            _, cfg_to_alias = _build_camera_maps(cameras_cfg)
             cameras = [
-                {"device_id": name, "name": name, "enabled": info.get("enabled", True)}
+                {
+                    "device_id": name,
+                    "alias": cfg_to_alias.get(name, name),
+                    "name": name,
+                    "enabled": info.get("enabled", True),
+                    "frame_endpoint": f"/cameras/{name}/frame",
+                }
                 for name, info in cameras_cfg.items()
                 if info.get("enabled", True)
             ]
         except Exception as e:
             logger.warning("Could not load camera config: %s", e)
             cameras = []
-        # Attach frame endpoint hints so clients can fetch live frames directly.
-        for cam in cameras:
-            cam["frame_endpoint"] = f"/cameras/{cam['device_id']}/frame"
         return {"cameras": cameras}
 
     @router.get("/cameras/realtime")
-    async def get_realtime_cameras():
+    def get_realtime_cameras():
         """Get latest frames for all enabled cameras as base64 JPEG."""
         try:
             import rospy
@@ -103,7 +126,7 @@ def create_router(state_agg, *args, **kwargs):
             return JSONResponse({"error": str(e)}, status_code=503)
 
     @router.get("/cameras/{device_id}/frame")
-    async def get_device_frame(device_id: str):
+    def get_device_frame(device_id: str):
         """Get latest frame from a ROS camera topic as JPEG.
 
         Args:
@@ -119,10 +142,11 @@ def create_router(state_agg, *args, **kwargs):
             cfg = get_config()
             cameras_cfg = cfg.get("cameras", {})
 
-            if device_id not in cameras_cfg:
+            resolved = _resolve_device_id(device_id, cameras_cfg)
+            if resolved is None:
                 return JSONResponse({"error": f"unknown camera: {device_id}"}, status_code=404)
 
-            topic = cameras_cfg[device_id].get("topic")
+            topic = cameras_cfg[resolved].get("topic")
             if not topic:
                 return JSONResponse({"error": f"no topic configured for camera: {device_id}"}, status_code=503)
 
