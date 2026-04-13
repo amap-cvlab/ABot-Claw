@@ -48,10 +48,21 @@ def build_app(cfg: ServerConfig, service_mgr: ServiceManager | None = None) -> F
             return RedirectResponse(url="/services/dashboard")
         return {"status": "ok", "message": "Piper Robot Agent Server", "docs": "/docs"}
 
-    # -- 状态聚合器 (PiperRobotEnv 在代码执行子进程中初始化, 这里用 None 表示轻量监控) ------
-    # StateAggregator 在 server 进程中以 env=None 启动，仅用于 /state API 端点展示轮廓。
-    # 实际机器人控制在 code_executor 的子进程中通过 PiperRobotEnv 完成。
-    state_agg = StateAggregator(env=None, poll_hz=cfg.base.poll_hz)
+    # -- 状态聚合器 ---------------------------------------------------------
+    # Prefer a real ROS-backed env in the main process so /state can expose
+    # real joint/end-pose/gripper/camera availability. Fall back to env=None
+    robot_env = None
+    try:
+        from robot_sdk.piper_sdk import PiperRobotEnv
+        robot_env = PiperRobotEnv(init_ros_node=True)
+        logger.info("StateAggregator connected to real PiperRobotEnv")
+    except Exception as e:
+        logger.warning(
+            "Failed to initialize PiperRobotEnv in server process, "
+            "falling back to empty state: %s",
+            e,
+        )
+    state_agg = StateAggregator(env=robot_env, poll_hz=cfg.base.poll_hz)
 
     display = DisplayBroadcaster()
 
@@ -72,8 +83,8 @@ def build_app(cfg: ServerConfig, service_mgr: ServiceManager | None = None) -> F
 
     app.include_router(state_router(state_agg, None, lease_mgr, None, None, None, None, None))
     app.include_router(lease_router(lease_mgr))
-    app.include_router(ws_router(state_agg, cfg, None, key_store=key_store))
-    app.include_router(init_code_routes(lease_mgr, None, state_agg))
+    app.include_router(ws_router(state_agg, cfg, robot_env, key_store=key_store))
+    app.include_router(init_code_routes(lease_mgr, robot_env, state_agg))
     app.include_router(sdk_docs_router)
     app.include_router(system_guide_router)
     app.include_router(yolo_router)

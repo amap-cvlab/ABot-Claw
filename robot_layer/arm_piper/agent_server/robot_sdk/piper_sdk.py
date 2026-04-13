@@ -16,6 +16,10 @@ import math
 import os
 import sys
 import shlex
+import time
+import threading
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import cv2
@@ -73,6 +77,17 @@ from config import get_config
 from piper_image_sdk import ImageRecorder, Recorder
 
 
+@dataclass
+class CameraFrame:
+    device_id: str
+    stream_type: str
+    frame: np.ndarray
+    timestamp: float
+    width: int
+    height: int
+    depth_scale: Optional[float] = None
+
+
 class PiperRobotEnv:
     """基于 MoveIt 的 Piper 机械臂统一控制环境
 
@@ -104,6 +119,13 @@ class PiperRobotEnv:
 
         self.max_velocity = max_velocity if max_velocity is not None else piper_cfg.get("max_velocity", 0.5)
         self.max_acceleration = max_acceleration if max_acceleration is not None else piper_cfg.get("max_acceleration", 0.5)
+
+        self._latest_camera_frames = {}
+        self._camera_lock = threading.Lock()
+        self._camera_meta = [
+            {"device_id": "left_camera_0_left", "name": "left_camera_0_left"},
+            {"device_id": "wrist_camera_0_left", "name": "wrist_camera_0_left"},
+        ]
 
         self._init_robot_interface()
         self._init_cameras()
@@ -362,6 +384,20 @@ class PiperRobotEnv:
         """
         camera_obs = self._get_images()
         timestamps = {name: rospy.Time.now().to_sec() for name in camera_obs}
+
+        with self._camera_lock:
+            for name, img in camera_obs.items():
+                if img is None:
+                    continue
+                self._latest_camera_frames[(name, "color")] = CameraFrame(
+                    device_id=name,
+                    stream_type="color",
+                    frame=img,
+                    timestamp=timestamps.get(name, time.time()),
+                    width=int(img.shape[1]),
+                    height=int(img.shape[0]),
+                    depth_scale=None,
+                )
         return camera_obs, timestamps
 
     # ---- 6. 获取关节电机角度 ---- #
@@ -427,8 +463,62 @@ class PiperRobotEnv:
         obs["timestamp"]["cameras"] = rospy.Time.now().to_sec()
         return obs
 
+    def get_latest_decoded_frame(self, stream_type: str, device_id: str | None = None):
+        if stream_type != "color":
+            return None
+
+        with self._camera_lock:
+            has_cache = bool(self._latest_camera_frames)
+        if not has_cache:
+            try:
+                self.read_cameras()
+            except Exception:
+                return None
+
+        with self._camera_lock:
+            if device_id is not None:
+                return self._latest_camera_frames.get((device_id, stream_type))
+            for (dev, st), frame in self._latest_camera_frames.items():
+                if st == stream_type:
+                    return frame
+        return None
+
+    def get_all_frames(self):
+        images, _ = self.read_cameras()
+        out = {}
+        for device_id, img in images.items():
+            if img is None:
+                continue
+            ok, buf = cv2.imencode(".jpg", img)
+            if ok:
+                out[device_id] = buf.tobytes()
+        return out
+
+    def get_cameras(self):
+        return list(self._camera_meta)
+
     def get_state(self):
-        return self._get_robot_state(), {"robot_state": rospy.Time.now().to_sec()}
+        robot_state = self.get_robot_state()
+        end_pose = self.get_robot_end_pose()
+
+        with self._camera_lock:
+            cameras = [
+                {
+                    "device_id": device_id,
+                    "stream_type": stream_type,
+                    "timestamp": frame.timestamp,
+                    "width": frame.width,
+                    "height": frame.height,
+                }
+                for (device_id, stream_type), frame in self._latest_camera_frames.items()
+            ]
+
+        return {
+            "robot_state": robot_state,
+            "end_pose": end_pose,
+            "cameras": cameras,
+            "timestamp": time.time(),
+        }
 
 
 if __name__ == "__main__":

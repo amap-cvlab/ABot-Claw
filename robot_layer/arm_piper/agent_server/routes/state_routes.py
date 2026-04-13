@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import base64
 from typing import Optional
 
 from fastapi import APIRouter, Response, Query
@@ -48,7 +49,58 @@ def create_router(state_agg, *args, **kwargs):
         except Exception as e:
             logger.warning("Could not load camera config: %s", e)
             cameras = []
+        # Attach frame endpoint hints so clients can fetch live frames directly.
+        for cam in cameras:
+            cam["frame_endpoint"] = f"/cameras/{cam['device_id']}/frame"
         return {"cameras": cameras}
+
+    @router.get("/cameras/realtime")
+    async def get_realtime_cameras():
+        """Get latest frames for all enabled cameras as base64 JPEG."""
+        try:
+            import rospy
+            from sensor_msgs.msg import Image as RosImage
+            from cv_bridge import CvBridge
+            import cv2
+
+            from robot_sdk.config import get_config
+            cfg = get_config()
+            cameras_cfg = cfg.get("cameras", {})
+            enabled = [
+                (name, info.get("topic"))
+                for name, info in cameras_cfg.items()
+                if info.get("enabled", True) and info.get("topic")
+            ]
+
+            bridge = CvBridge()
+            frames = {}
+            errors = {}
+
+            for name, topic in enabled:
+                try:
+                    msg = rospy.wait_for_message(topic, RosImage, timeout=2.0)
+                    try:
+                        img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                    except Exception:
+                        img = bridge.imgmsg_to_cv2(msg)
+
+                    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    if not ok:
+                        errors[name] = "failed to encode frame"
+                        continue
+
+                    frames[name] = {
+                        "topic": topic,
+                        "timestamp": float(msg.header.stamp.to_sec()),
+                        "jpeg_base64": base64.b64encode(buf.tobytes()).decode("ascii"),
+                    }
+                except Exception as e:
+                    errors[name] = str(e)
+
+            return {"frames": frames, "errors": errors}
+        except Exception as e:
+            logger.warning("Realtime cameras error: %s", e)
+            return JSONResponse({"error": str(e)}, status_code=503)
 
     @router.get("/cameras/{device_id}/frame")
     async def get_device_frame(device_id: str):

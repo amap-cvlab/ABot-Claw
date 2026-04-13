@@ -112,45 +112,47 @@ def create_router(state_agg, config, camera_backend=None, key_store: KeyStore | 
                         continue
                     
                     for stream_type in subscription.streams:
-                        frame = camera_backend.get_latest_decoded_frame(stream_type)
-                        if frame is None:
-                            continue
-                        
-                        # Encode frame
-                        if stream_type == "color" and CV2_AVAILABLE:
-                            encode_params = [cv2.IMWRITE_JPEG_QUALITY, subscription.quality]
-                            _, encoded = cv2.imencode(".jpg", frame.frame, encode_params)
-                            data = encoded.tobytes()
-                            fmt = "jpeg"
-                        elif stream_type == "depth" and CV2_AVAILABLE:
-                            _, encoded = cv2.imencode(".png", frame.frame)
-                            data = encoded.tobytes()
-                            fmt = "png"
-                        elif stream_type in ("infrared_left", "infrared_right") and CV2_AVAILABLE:
-                            encode_params = [cv2.IMWRITE_JPEG_QUALITY, subscription.quality]
-                            _, encoded = cv2.imencode(".jpg", frame.frame, encode_params)
-                            data = encoded.tobytes()
-                            fmt = "jpeg"
-                        else:
-                            data = frame.frame.tobytes()
-                            fmt = "raw"
-                        
-                        # Build message: [header_len][header_json][binary_data]
-                        header = json.dumps({
-                            "type": "frame",
-                            "device_id": frame.device_id,
-                            "stream_type": stream_type,
-                            "timestamp": frame.timestamp,
-                            "width": frame.width,
-                            "height": frame.height,
-                            "format": fmt,
-                            "depth_scale": frame.depth_scale,
-                        }).encode()
-                        
-                        header_len = struct.pack(">I", len(header))
-                        message = header_len + header + data
-                        
-                        await ws.send_bytes(message)
+                        device_ids = subscription.devices or [None]
+                        for device_id in device_ids:
+                            frame = camera_backend.get_latest_decoded_frame(stream_type, device_id=device_id)
+                            if frame is None:
+                                continue
+                            
+                            # Encode frame
+                            if stream_type == "color" and CV2_AVAILABLE:
+                                encode_params = [cv2.IMWRITE_JPEG_QUALITY, subscription.quality]
+                                _, encoded = cv2.imencode(".jpg", frame.frame, encode_params)
+                                data = encoded.tobytes()
+                                fmt = "jpeg"
+                            elif stream_type == "depth" and CV2_AVAILABLE:
+                                _, encoded = cv2.imencode(".png", frame.frame)
+                                data = encoded.tobytes()
+                                fmt = "png"
+                            elif stream_type in ("infrared_left", "infrared_right") and CV2_AVAILABLE:
+                                encode_params = [cv2.IMWRITE_JPEG_QUALITY, subscription.quality]
+                                _, encoded = cv2.imencode(".jpg", frame.frame, encode_params)
+                                data = encoded.tobytes()
+                                fmt = "jpeg"
+                            else:
+                                data = frame.frame.tobytes()
+                                fmt = "raw"
+                            
+                            # Build message: [header_len][header_json][binary_data]
+                            header = json.dumps({
+                                "type": "frame",
+                                "device_id": frame.device_id,
+                                "stream_type": stream_type,
+                                "timestamp": frame.timestamp,
+                                "width": frame.width,
+                                "height": frame.height,
+                                "format": fmt,
+                                "depth_scale": frame.depth_scale,
+                            }).encode()
+                            
+                            header_len = struct.pack(">I", len(header))
+                            message = header_len + header + data
+                            
+                            await ws.send_bytes(message)
                     
                     last_send = now
                     
