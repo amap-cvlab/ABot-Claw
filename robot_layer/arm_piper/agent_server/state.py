@@ -150,7 +150,7 @@ class StateAggregator:
             import numpy as np
             images, _ = await loop.run_in_executor(None, self._env.read_cameras)
             cameras = {
-                name: img is not None and np.any(img)
+                name: bool(img is not None and np.any(img))
                 for name, img in images.items()
             }
         except Exception as e:

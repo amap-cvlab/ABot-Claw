@@ -19,7 +19,10 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from config import get_config
+try:
+    from robot_sdk.config import get_config
+except ImportError:
+    from config import get_config
 
 
 @dataclass

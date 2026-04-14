@@ -30,7 +30,10 @@ import tf2_ros
 from cv_bridge import CvBridge
 from sensor_msgs.msg import CameraInfo, Image as RosImage
 
-from config import get_config
+try:
+    from robot_sdk.config import get_config
+except ImportError:
+    from config import get_config
 
 
 class YoloSDK:

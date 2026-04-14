@@ -12,6 +12,8 @@ Piper 机械臂 SDK —— 基于 MoveIt 服务的控制接口
     - get_robot_end_pose()    获取末端位姿
 """
 
+from __future__ import annotations
+
 import math
 import os
 import sys
@@ -59,22 +61,39 @@ if os.environ.get("PIPER_ENV_SOURCED") != "1":
     try:
         import moveit_ctrl.srv  # noqa: F401
     except Exception:
+        import subprocess
+        env_cmd = f"source {shlex.quote(SETUP_BASH)} >/dev/null 2>&1 && env -0"
+        result = subprocess.run(
+            ["bash", "-c", env_cmd],
+            capture_output=True,
+        )
+        if result.returncode == 0 and result.stdout:
+            for entry in result.stdout.split(b"\x00"):
+                if b"=" in entry:
+                    k, _, v = entry.partition(b"=")
+                    os.environ[k.decode()] = v.decode()
+
         os.environ["PIPER_ENV_SOURCED"] = "1"
         caller_script = os.path.abspath(sys.argv[0])
         args = " ".join(shlex.quote(a) for a in sys.argv[1:])
-        cmd = (
-            f"source {shlex.quote(SETUP_BASH)} >/dev/null 2>&1 && "
-            f"exec {shlex.quote(sys.executable)} {shlex.quote(caller_script)} {args}"
+        os.execvp(
+            sys.executable,
+            [sys.executable, caller_script] + sys.argv[1:],
         )
-        os.execvp("bash", ["bash", "-lc", cmd])
 
 import rospy
 from geometry_msgs.msg import PoseStamped
 from moveit_ctrl.srv import JointMoveitCtrl, JointMoveitCtrlRequest
 from tf.transformations import quaternion_from_euler
 
-from config import get_config
-from piper_image_sdk import ImageRecorder, Recorder
+try:
+    from robot_sdk.config import get_config
+except ImportError:
+    from config import get_config
+try:
+    from robot_sdk.piper_image_sdk import ImageRecorder, Recorder
+except ImportError:
+    from piper_image_sdk import ImageRecorder, Recorder
 
 
 @dataclass
@@ -114,6 +133,17 @@ class PiperRobotEnv:
         self._end_pose_topic = ros_cfg.get("end_pose_topic", "/end_pose")
 
         if init_ros_node and not rospy.get_node_uri():
+            import xmlrpc.client
+            master_uri = os.environ.get("ROS_MASTER_URI", "http://localhost:11311")
+            master = xmlrpc.client.ServerProxy(master_uri)
+            for i in range(30):
+                try:
+                    master.getSystemState("/probe")
+                    break
+                except Exception:
+                    if i == 0:
+                        print(f"Waiting for ROS master at {master_uri} ...")
+                    time.sleep(1)
             rospy.init_node("piper_robot_env", anonymous=True)
             print("ROS node initialized: piper_robot_env")
 

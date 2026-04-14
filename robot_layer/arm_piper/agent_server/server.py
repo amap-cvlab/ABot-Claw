@@ -62,6 +62,16 @@ def build_app(cfg: ServerConfig, service_mgr: ServiceManager | None = None) -> F
             "falling back to empty state: %s",
             e,
         )
+    try:
+        import rospy
+        uri = rospy.get_node_uri()
+        logger.info("rospy node URI after init: %s, is_initialized: %s",
+                     uri, rospy.core.is_initialized())
+        if not rospy.core.is_initialized():
+            rospy.init_node("agent_server", anonymous=True, disable_signals=True)
+            logger.info("Fallback rospy node initialized for camera access")
+    except Exception as exc:
+        logger.warning("rospy check/init failed: %s", exc)
     state_agg = StateAggregator(env=robot_env, poll_hz=cfg.base.poll_hz)
 
     display = DisplayBroadcaster()
@@ -81,7 +91,7 @@ def build_app(cfg: ServerConfig, service_mgr: ServiceManager | None = None) -> F
     from routes.yolo_routes import router as yolo_router
     from routes.display_routes import create_router as display_router
 
-    app.include_router(state_router(state_agg, None, lease_mgr, None, None, None, None, None))
+    app.include_router(state_router(state_agg, robot_env, lease_mgr, None, None, None, None, None))
     app.include_router(lease_router(lease_mgr))
     app.include_router(ws_router(state_agg, cfg, robot_env, key_store=key_store))
     app.include_router(init_code_routes(lease_mgr, robot_env, state_agg))

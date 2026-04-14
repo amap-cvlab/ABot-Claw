@@ -473,10 +473,11 @@ class CodeExecutor:
 
             # Wait for completion or timeout (non-blocking to event loop)
             try:
-                exit_code = await asyncio.to_thread(process.wait, timeout=timeout)
+                loop = asyncio.get_event_loop()
+                exit_code = await loop.run_in_executor(None, process.wait, timeout)
             except subprocess.TimeoutExpired:
                 process.kill()
-                await asyncio.to_thread(process.wait)
+                await loop.run_in_executor(None, process.wait)
                 # Wait for readers to finish consuming remaining output
                 stdout_thread.join(timeout=2.0)
                 stderr_thread.join(timeout=2.0)

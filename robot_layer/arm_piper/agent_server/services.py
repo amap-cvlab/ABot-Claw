@@ -292,7 +292,13 @@ class ServiceManager:
             logger.warning("Failed to save PIDs: %s", e)
 
     def _restore_or_cleanup(self) -> None:
-        """On startup, kill any orphaned processes from a previous run."""
+        """On startup, kill orphaned processes from a *previous server run* only.
+
+        Only kills processes whose PIDs were saved in the PID file.  Does NOT
+        blindly ``pkill`` by pattern, because that would murder externally
+        managed processes (e.g. a roscore / camera driver the user started
+        manually before the server).
+        """
         if self._pid_file.exists():
             try:
                 with open(self._pid_file) as f:
@@ -309,11 +315,6 @@ class ServiceManager:
                 self._pid_file.unlink()
             except Exception:
                 pass
-
-        # Also kill by pattern to catch any other orphans
-        if not self._dry_run:
-            for key, state in self._services.items():
-                self._kill_by_pattern(state.definition.kill_patterns)
 
     def _kill_by_pattern(self, patterns: list[str]) -> None:
         """Kill any process matching the given command-line patterns."""

@@ -6,7 +6,10 @@ import rospy
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, JointState
 
-from config import get_config
+try:
+    from robot_sdk.config import get_config
+except ImportError:
+    from config import get_config
 
 _ALL_CAMERA_NAMES = ["cam_high", "cam_low", "cam_left_wrist", "cam_right_wrist"]
 

@@ -589,7 +589,8 @@ class RewindOrchestrator:
         logger.info("[RewindOrchestrator] Go home triggered (no rewind)")
         if self._gripper_backend:
             try:
-                await asyncio.to_thread(self._gripper_backend.open)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, self._gripper_backend.open)
                 logger.info("[RewindOrchestrator] Opened gripper")
             except Exception as e:
                 logger.warning(f"[RewindOrchestrator] Failed to open gripper: {e}")
@@ -886,7 +887,8 @@ class RewindOrchestrator:
         # Open gripper before rewinding arm/base
         if "gripper" in components and self._gripper_backend:
             try:
-                await asyncio.to_thread(self._gripper_backend.open)
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, self._gripper_backend.open)
                 logger.info("[RewindOrchestrator] Opened gripper before rewind")
             except Exception as e:
                 logger.warning(f"[RewindOrchestrator] Failed to open gripper: {e}")

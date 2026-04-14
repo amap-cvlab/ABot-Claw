@@ -44,8 +44,7 @@ def create_router(state_agg, *args, **kwargs):
     Only state_agg and lease_mgr are used; extra positional/keyword args from
     the old multi-backend signature are accepted and ignored for compatibility.
     """
-    # Extract lease_mgr from positional args (3rd positional after state_agg)
-    # Old signature: create_router(state_agg, camera_backend, lease_mgr, ...)
+    robot_env = args[0] if len(args) > 0 else kwargs.get("robot_env")
     lease_mgr = args[1] if len(args) > 1 else kwargs.get("lease_mgr")
 
     @router.get("/state")
@@ -77,16 +76,23 @@ def create_router(state_agg, *args, **kwargs):
             cameras = []
         return {"cameras": cameras}
 
+    def _get_frame_from_recorder(cam_name: str):
+        """Try to get a cached BGR frame from robot_env's ImageRecorder."""
+        if robot_env is None:
+            return None
+        rec = getattr(robot_env, "image_recorder", None)
+        if rec is None:
+            return None
+        img = getattr(rec, f"{cam_name}_rgb_image", None)
+        return img
+
     @router.get("/cameras/realtime")
     def get_realtime_cameras():
         """Get latest frames for all enabled cameras as base64 JPEG."""
         try:
-            import rospy
-            from sensor_msgs.msg import Image as RosImage
-            from cv_bridge import CvBridge
             import cv2
-
             from robot_sdk.config import get_config
+
             cfg = get_config()
             cameras_cfg = cfg.get("cameras", {})
             enabled = [
@@ -95,26 +101,25 @@ def create_router(state_agg, *args, **kwargs):
                 if info.get("enabled", True) and info.get("topic")
             ]
 
-            bridge = CvBridge()
             frames = {}
             errors = {}
 
             for name, topic in enabled:
                 try:
-                    msg = rospy.wait_for_message(topic, RosImage, timeout=2.0)
-                    try:
-                        img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-                    except Exception:
-                        img = bridge.imgmsg_to_cv2(msg)
+                    img = _get_frame_from_recorder(name)
+                    if img is None:
+                        errors[name] = "no frame cached yet"
+                        continue
 
                     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
                     if not ok:
                         errors[name] = "failed to encode frame"
                         continue
 
+                    import time
                     frames[name] = {
                         "topic": topic,
-                        "timestamp": float(msg.header.stamp.to_sec()),
+                        "timestamp": time.time(),
                         "jpeg_base64": base64.b64encode(buf.tobytes()).decode("ascii"),
                     }
                 except Exception as e:
@@ -127,18 +132,15 @@ def create_router(state_agg, *args, **kwargs):
 
     @router.get("/cameras/{device_id}/frame")
     def get_device_frame(device_id: str):
-        """Get latest frame from a ROS camera topic as JPEG.
+        """Get latest frame from camera as JPEG.
 
-        Args:
-            device_id: Camera name as defined in config.yaml (e.g. cam_high, cam_low)
+        Reads from the in-process ImageRecorder cache (subscribed via ROS).
+        Falls back to rospy.wait_for_message if no cached frame is available.
         """
         try:
-            import rospy
-            from sensor_msgs.msg import Image as RosImage
-            from cv_bridge import CvBridge
             import cv2
-
             from robot_sdk.config import get_config
+
             cfg = get_config()
             cameras_cfg = cfg.get("cameras", {})
 
@@ -150,12 +152,24 @@ def create_router(state_agg, *args, **kwargs):
             if not topic:
                 return JSONResponse({"error": f"no topic configured for camera: {device_id}"}, status_code=503)
 
-            msg = rospy.wait_for_message(topic, RosImage, timeout=2.0)
-            bridge = CvBridge()
-            try:
-                img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            except Exception:
-                img = bridge.imgmsg_to_cv2(msg)
+            img = _get_frame_from_recorder(resolved)
+
+            if img is None:
+                try:
+                    import rospy
+                    from sensor_msgs.msg import Image as RosImage
+                    from cv_bridge import CvBridge
+                    msg = rospy.wait_for_message(topic, RosImage, timeout=3.0)
+                    bridge = CvBridge()
+                    try:
+                        img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                    except Exception:
+                        img = bridge.imgmsg_to_cv2(msg)
+                except Exception as e:
+                    return JSONResponse(
+                        {"error": f"no cached frame and ROS fallback failed: {e}"},
+                        status_code=503,
+                    )
 
             ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
             if not ok:
@@ -174,6 +188,41 @@ def create_router(state_agg, *args, **kwargs):
         if lease_mgr is not None:
             result["lease"] = lease_mgr.status()
         return result
+
+    @router.get("/debug/ros")
+    def debug_ros():
+        """Diagnostic: check rospy node and topic status."""
+        info = {}
+        try:
+            import rospy
+            info["node_uri"] = rospy.get_node_uri()
+            info["is_initialized"] = rospy.core.is_initialized()
+            info["is_shutdown"] = rospy.core.is_shutdown()
+            info["node_name"] = rospy.get_name()
+        except Exception as e:
+            info["rospy_error"] = str(e)
+
+        try:
+            import rospy
+            from sensor_msgs.msg import Image as RosImage
+            msg = rospy.wait_for_message(
+                "/wrist_camera/color/image_raw", RosImage, timeout=5.0)
+            info["wait_for_message"] = f"OK {msg.width}x{msg.height}"
+        except Exception as e:
+            info["wait_for_message"] = f"FAIL: {e}"
+
+        try:
+            import xmlrpc.client
+            master = xmlrpc.client.ServerProxy("http://localhost:11311")
+            code, _, state = master.getSystemState("/debug")
+            _, subs, _ = state
+            for topic, nodes in subs:
+                if "image_raw" in topic:
+                    info[f"master_subs_{topic}"] = nodes
+        except Exception as e:
+            info["master_error"] = str(e)
+
+        return info
 
     @router.get("/logs", include_in_schema=False)
     async def get_server_logs(limit: int = Query(default=100, ge=1, le=500)):
